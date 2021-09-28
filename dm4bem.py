@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Thu Sep  9 11:00:33 2021
+Created on Wed Sep 22 09:58:49 2021
 
 @author: cghiaus
 
@@ -12,8 +12,108 @@ https://github.com/pvlib/pvlib-python/blob/master/pvlib/iotools/epw.py
 
 import numpy as np
 import pandas as pd
+import sys
 
 
+def tc2ss(A, G, b, C, f, y):
+    """
+        Parameters
+        ----------
+        A : TYPE np.array
+            adjancecy (TC connection ) matrix:
+            #rows = #heat flow rates; #cols = #temperature nodes
+
+        G : TYPE np.array
+            square diagonal matrix of conductances
+            #rows = #heat flow rates (or resistances)
+
+        b : TYPE np.array
+            vector indicating the presence of temperature sources on branches:
+                1 for branches with temperature sources, otherwise 0
+        C : TYPE np.array
+            square diagonal matrix of capacities
+        f : TYPE np.array
+            vector indicating the presence of flow sources in nodes:
+                1 for nodes with heat sources, otherwise 0
+        y : TYPE np.array
+            vector indicating the temperatures in the outputs:
+                1 for output nodes, otherwise 0
+
+        Returns
+        -------
+        As state matrix in state equation
+        Bs input matrix in state equation
+        Cs output matrix in observation equation
+        Ds input matrix in observation equation
+        Idx{1} nodes with capacities
+            {2} branches with temp. sources
+            {3} nodes with flow sources
+            {4} nodes output temperatures
+
+    """
+
+    rC = np.nonzero(np.diag(C))[0]          # rows of non-zero elements in C
+    r0 = np.nonzero(np.diag(C) == 0)[0]     # rows of zero elements in C
+    # idx_nonzero = {'C': rC,
+    #                'b': np.nonzero(b)[0],
+    #                'f': np.nonzero(f)[0],
+    #                'y': np.nonzero(y)[0]}
+
+    if rC.size == 0:
+        sys.exit('Error in dm4bem.tc2ss: capacity C matrix is zero')
+
+    CC = np.diag(C[np.nonzero(C)])
+    K = -A.T @ G @ A
+
+    K11 = K[r0, :][:, r0]
+    K12 = K[r0, :][:, rC]
+    K21 = K[rC, :][:, r0]
+    K22 = K[rC, :][:, rC]
+
+    Kb = A.T @ G
+    Kb1 = Kb[r0, :]
+    Kb2 = Kb[rC, :]
+
+    # State equation
+    As = np.linalg.inv(CC) @ (
+        -K21 @ np.linalg.inv(K11) @ K12 + K22)
+    Bs = np.linalg.inv(CC) @ np.hstack([
+        -K21 @ np.linalg.inv(K11) @ Kb1 + Kb2,
+        -K21 @ np.linalg.inv(K11),
+        np.eye(CC.shape[0])])
+    # re-arragne B s in order of f-sources
+    # index B for sources [b f0 fC]
+    idx_new = np.hstack([np.arange(b.size), b.size + r0, b.size + rC])
+    Bs[:, idx_new] = np.array(Bs)
+    # indexes of effective inputs [b f]
+    inp = np.hstack([np.nonzero(b)[0], A.shape[0] + np.nonzero(f)[0]])
+    # extract actual inputs (inputs <> 0)
+    Bs = Bs[:, inp]
+
+    # Ds if outputs are all states
+    Ds = np.zeros([y[rC].size, np.hstack([b, f]).size])
+
+    # observation equation for outputs that are not states
+    Cso = -np.linalg.inv(K11) @ K12
+    Dso = -np.linalg.inv(K11) @ np.hstack(
+        [Kb1, np.eye(r0.size), np.zeros([r0.size, CC.shape[0]])])
+
+    # observation equation for any output
+    Cx = np.zeros([y.size, As.shape[0]])
+    Cs = np.diag(y[rC])
+    Cx[rC, :] = Cs
+    Cx[r0, :] = Cso
+    Cs = Cx[np.nonzero(y)[0], :]
+
+    Dx = np.zeros([y.size, np.hstack([b, f]).shape[0]])
+    Dx[r0, :] = Dso     # feed-through if no capacity
+    Dx[:, idx_new] = np.array(Dx)   # rearange in order of f-sources
+    Ds = Dx[np.nonzero(y)[0], :][:, inp]
+
+    return As, Bs, Cs, Ds
+
+
+# ===========================================================================
 def sol_rad_tilt_surf(weather_data, surface_orientation, albedo):
     """
     Created on Fri Sep 10 11:04:48 2021
