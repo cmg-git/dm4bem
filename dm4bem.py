@@ -187,7 +187,7 @@ def sol_rad_tilt_surf(weather_data, surface_orientation, albedo):
     # [Th-CE 2005] §11.2.1.1
     theta = np.sin(d) * np.sin(L) * np.cos(B)
     theta -= np.sin(d) * np.cos(L) * np.sin(B) * np.cos(Z)
-    theta -= np.cos(d) * np.cos(L) * np.cos(B) * np.cos(h)
+    theta += np.cos(d) * np.cos(L) * np.cos(B) * np.cos(h)
     theta += np.cos(d) * np.sin(L) * np.sin(B) * np.cos(Z) * np.cos(h)
     theta += np.cos(d) * np.sin(B) * np.sin(Z) * np.sin(h)
     theta = np.array(np.arccos(theta))
@@ -195,12 +195,12 @@ def sol_rad_tilt_surf(weather_data, surface_orientation, albedo):
 
     # Direct radiation on a wall
     # [Th-CE 2005] §11.2.1.1
-    dir_rad = weather_data["dir_n_rad"] * np.cos(B)
+    dir_rad = weather_data["dir_n_rad"] * np.cos(theta)
     dir_rad[dir_rad < 0] = 0
 
     # Diffuse radiation on a wall
     # [Th-CE 2005] §11.2.1.2, Eq. 79, p. 31
-    dif_rad = weather_data["dif_h_rad"] * (1 + np.cos(theta)) / 2
+    dif_rad = weather_data["dif_h_rad"] * (1 + np.cos(B)) / 2
 
     # Solar radiation reflected by the ground
     # [Th-CE 2005] §112.1.3, after eq. (78)
