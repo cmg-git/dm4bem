@@ -271,10 +271,41 @@ def P_control(filename, start_date, end_date, dt,
     fig.tight_layout()
 
 
-def heat_cool(filename, start_date, end_date, dt,
-              Af, Bf, Cf, Df, Kpf,
-              Ac, Bc, Cc, Dc, Kpc,
-              Tisp, DeltaT):
+def swing_models(filename, start_date, end_date, dt,
+                 Af, Bf, Cf, Df, Kpf,
+                 Ac, Bc, Cc, Dc, Kpc,
+                 Tisp, DeltaT):
+    """
+    Use of two models, one in free-running and one perfect controller
+
+    Parameters
+    ----------
+    filename : TYPE
+        Weather file.
+    start_date : TYPE
+        DESCRIPTION.
+    end_date : TYPE
+        DESCRIPTION.
+    dt : TYPE
+        Integration time step.
+    Af, Bf, Cf, Df : TYPE
+        State-space model for free-running.
+    Kpf : TYPE
+        Controller gain for free-running (Kpf -> 0).
+    Ac, Bc, Cc, Dc : TYPE
+        State-space model for perfect control..
+    Kpc : TYPE
+        Controller gain for perfect P-control (Kpc -> infinity).
+    Tisp : TYPE
+        Indoor temperature set point.
+    DeltaT : TYPE
+        Dead-band (accepted swing) temperature.
+
+    Returns
+    -------
+    None.
+
+    """
     # Read weather data from Energyplus .epw file
     [data, meta] = dm4bem.read_epw(filename, coerce_year=None)
     weather = data[["temp_air", "dir_n_rad", "dif_h_rad"]]
@@ -351,29 +382,30 @@ def heat_cool(filename, start_date, end_date, dt,
     fig.tight_layout()
 
 
-# Kpf = 1e-3   # no controller Kp -> 0
-# TCa = thermal_circuit(Kpf)
-# [Af, Bf, Cf, Df] = dm4bem.tc2ss(
-#     TCa['A'], TCa['G'], TCa['b'], TCa['C'], TCa['f'], TCa['y'])
-# dtmax = min(-2. / np.linalg.eig(Af)[0])
-# print(f'Maximum time step in free-floating: {dtmax:.2f} s')
+# ## t04
+Kpf = 1e-3   # no controller Kp -> 0
+TCa = thermal_circuit(Kpf)
+[Af, Bf, Cf, Df] = dm4bem.tc2ss(
+    TCa['A'], TCa['G'], TCa['b'], TCa['C'], TCa['f'], TCa['y'])
+dtmax = min(-2. / np.linalg.eig(Af)[0])
+print(f'Maximum time step in free-floating: {dtmax:.2f} s')
 
-# Kpc = 1e3   # no controller Kp -> 0
-# TCa = thermal_circuit(Kpc)
-# [Ac, Bc, Cc, Dc] = dm4bem.tc2ss(
-#     TCa['A'], TCa['G'], TCa['b'], TCa['C'], TCa['f'], TCa['y'])
-# dtmax = min(-2. / np.linalg.eig(Ac)[0])
-# print(f'Maximum time step for P-controled HAVC system: {dtmax:.2f} s')
+Kpc = 1e3   # no controller Kp -> 0
+TCa = thermal_circuit(Kpc)
+[Ac, Bc, Cc, Dc] = dm4bem.tc2ss(
+    TCa['A'], TCa['G'], TCa['b'], TCa['C'], TCa['f'], TCa['y'])
+dtmax = min(-2. / np.linalg.eig(Ac)[0])
+print(f'Maximum time step for P-controled HAVC system: {dtmax:.2f} s')
 
-# filename = 'FRA_Lyon.074810_IWEC.epw'
-# start_date = '2000-01-03 12:00:00'
-# end_date = '2000-02-03 18:00:00'
-# dt = 50
+filename = 'FRA_Lyon.074810_IWEC.epw'
+start_date = '2000-01-03 12:00:00'
+end_date = '2000-02-03 18:00:00'
+dt = 50
 
-# Tisp = 20
-# DeltaT = 4
+Tisp = 20
+DeltaT = 4
 
-# heat_cool(filename, start_date, end_date, dt,
-#           Af, Bf, Cf, Df, Kpf,
-#           Ac, Bc, Cc, Dc, Kpc,
-#           Tisp, DeltaT)
+swing_models(filename, start_date, end_date, dt,
+             Af, Bf, Cf, Df, Kpf,
+             Ac, Bc, Cc, Dc, Kpc,
+             Tisp, DeltaT)
