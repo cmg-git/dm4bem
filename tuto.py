@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+ #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Created on Mon Oct  4 19:05:01 2021
@@ -355,7 +355,7 @@ def swing_models(filename, start_date, end_date, dt,
         if y[k] < Tisp[k] or y[k] > DeltaT + Tisp[k]:
             temp_exp[:, k + 1] = (I + dt * Ac) @ temp_exp[:, k]\
                 + dt * Bc @ u.iloc[k, :]
-            y[k + 1] = Cc @ temp_exp[:, k + 1] + Dc @ u.iloc[k]
+            y[k + 1] = Cc @ temp_exp[:, k + 1] + Dc @ u.iloc[k + 1]
             qHVAC[k + 1] = Kpc * (Tisp[k + 1] - y[k + 1])
         else:
             temp_exp[:, k + 1] = (I + dt * Af) @ temp_exp[:, k]\
@@ -382,30 +382,94 @@ def swing_models(filename, start_date, end_date, dt,
     fig.tight_layout()
 
 
-# ## t04
-Kpf = 1e-3   # no controller Kp -> 0
-TCa = thermal_circuit(Kpf)
-[Af, Bf, Cf, Df] = dm4bem.tc2ss(
-    TCa['A'], TCa['G'], TCa['b'], TCa['C'], TCa['f'], TCa['y'])
-dtmax = min(-2. / np.linalg.eig(Af)[0])
-print(f'Maximum time step in free-floating: {dtmax:.2f} s')
+# ## t04 Swing models: heating & cooling and free-running
+# # =====================================================
+# Kpf = 1e-3   # no controller Kp -> 0
+# TCa = thermal_circuit(Kpf)
+# [Af, Bf, Cf, Df] = dm4bem.tc2ss(
+#     TCa['A'], TCa['G'], TCa['b'], TCa['C'], TCa['f'], TCa['y'])
+# dtmax = min(-2. / np.linalg.eig(Af)[0])
+# print(f'Maximum time step in free-floating: {dtmax:.2f} s')
 
-Kpc = 1e3   # no controller Kp -> 0
-TCa = thermal_circuit(Kpc)
-[Ac, Bc, Cc, Dc] = dm4bem.tc2ss(
-    TCa['A'], TCa['G'], TCa['b'], TCa['C'], TCa['f'], TCa['y'])
-dtmax = min(-2. / np.linalg.eig(Ac)[0])
-print(f'Maximum time step for P-controled HAVC system: {dtmax:.2f} s')
+# Kpc = 1e3   # perfect controller Kp -> infinity
+# TCa = thermal_circuit(Kpc)
+# [Ac, Bc, Cc, Dc] = dm4bem.tc2ss(
+#     TCa['A'], TCa['G'], TCa['b'], TCa['C'], TCa['f'], TCa['y'])
+# dtmax = min(-2. / np.linalg.eig(Ac)[0])
+# print(f'Maximum time step for P-controled HAVC system: {dtmax:.2f} s')
 
-filename = 'FRA_Lyon.074810_IWEC.epw'
-start_date = '2000-01-03 12:00:00'
-end_date = '2000-02-03 18:00:00'
-dt = 50
+# filename = 'FRA_Lyon.074810_IWEC.epw'
+# start_date = '2000-01-03 12:00:00'
+# end_date = '2000-02-03 18:00:00'
+# dt = 50
 
-Tisp = 20
-DeltaT = 4
+# Tisp = 20
+# DeltaT = 4
 
-swing_models(filename, start_date, end_date, dt,
-             Af, Bf, Cf, Df, Kpf,
-             Ac, Bc, Cc, Dc, Kpc,
-             Tisp, DeltaT)
+# swing_models(filename, start_date, end_date, dt,
+#              Af, Bf, Cf, Df, Kpf,
+#              Ac, Bc, Cc, Dc, Kpc,
+#              Tisp, DeltaT)
+
+def inputs(filename, start_date, end_date, dt,
+           As, Bs, Cs, Ds, Kp, Tisp):
+    # Read weather data from Energyplus .epw file
+    [data, meta] = dm4bem.read_epw(filename, coerce_year=None)
+    weather = data[["temp_air", "dir_n_rad", "dif_h_rad"]]
+    del data
+    weather.index = weather.index.map(lambda t: t.replace(year=2000))
+    weather = weather[(weather.index >= start_date) & (
+        weather.index < end_date)]
+
+    # Solar radiation on a tilted surface
+    surface_orientation = {'slope': 90,
+                           'azimuth': 0,
+                           'latitude': 45}
+    albedo = 0.2
+    rad_surf1 = dm4bem.sol_rad_tilt_surf(weather, surface_orientation, albedo)
+    rad_surf1['Φt1'] = rad_surf1.sum(axis=1)
+
+    # Interpolate weather data for time step dt
+    data = pd.concat([weather['temp_air'], rad_surf1['Φt1']], axis=1)
+    data = data.resample(str(dt) + 'S').interpolate(method='linear')
+    data = data.rename(columns={'temp_air': 'To'})
+
+    # Indoor temperature set-point
+    data['Ti'] = Tisp * np.ones(data.shape[0])
+
+    # Indoor auxiliary heat flow rate
+    data['Qa'] = 0 * np.ones(data.shape[0])
+
+    # time
+    t = dt * np.arange(data.shape[0])
+
+    u = pd.concat([data['To'], data['To'], data['To'], data['Ti'],
+                   α_wSW * wall['Surface']['Concrete'] * data['Φt1'],
+                   τ_gSW * α_wSW * wall['Surface']['Glass'] * data['Φt1'],
+                   data['Qa'],
+                   α_gSW * wall['Surface']['Glass'] * data['Φt1']], axis=1)
+
+    return t, u, data
+
+
+def plot_results(t, y, temp_exp, q_HVAC, data):
+    fig, axs = plt.subplots(2, 1)
+    axs[0].plot(t / 3600, y, label='$T_{indoor}$')
+    axs[0].plot(t / 3600, data['To'], label='$T_{outdoor}$')
+    # axs[0].plot(t / 3600, temp_exp[2], label='$T_{ss}$')
+    axs[0].set(xlabel='Time [h]',
+               ylabel='Temperatures [°C]',
+               title='Simulation for weather')
+    axs[0].legend(loc='upper right')
+    axs[0].set_ylim([-2, 40])
+
+    # plot total solar radiation and HVAC heat flow
+    axs[1].plot(t / 3600,  q_HVAC, label='$q_{HVAC}$')
+    axs[1].plot(t / 3600, data['Φt1'], label='$Φ_{total}$')
+    axs[1].set(xlabel='Time [h]',
+               ylabel='Heat flows [W]')
+    axs[1].legend(loc='upper right')
+    axs[1].set_ylim([-1000, 1000])
+    fig.tight_layout()
+    plt.draw()
+    plt.show()
