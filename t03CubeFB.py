@@ -43,25 +43,24 @@ wall = {'Conductivity': [1.4, 0.027, 1.4],      # W/m.K
         'Specific heat': [880, 1210, 750],      # J/kg.K
         'Width': [0.2, 0.08, 0.004],
         'Surface': [5 * l**2, 5 * l**2, l**2],  # m²
-        'Slices': [4, 2, 1]}                    # number of meshes
+        'Slice': [4, 2, 1]}                    # number of meshes
 wall = pd.DataFrame(wall, index=['Concrete', 'Insulation', 'Glass'])
 
 # Radiative properties
 # --------------------
 """ concrete EngToolbox Emissivity Coefficient Materials """
-ε_wLW = 0.9     # long wave wall emmisivity
+ε_wLW = 0.7     # long wave wall emmisivity
 """ grey to dark surface EngToolbox,
     Absorbed Solar Radiation by Surface Color """
 α_wSW = 0.2     # absortivity white surface
 
 """ Glass, pyrex EngToolbox Absorbed Solar Radiation bySurface Color """
-ε_gLW = 0.9     # long wave glass emmisivity
+ε_gLW = 0.8     # long wave glass emmisivity
 
 """ EngToolbox Optical properties of some typical glazing mat
     Window glass """
-τ_gSW = 0.83    # short wave glass transmitance
-
-α_gSW = 0.1     # short wave glass absortivity
+τ_gSW = 0.5     # short wave glass transmitance
+α_gSW = 0.05    # short wave glass absortivity
 
 σ = 5.67e-8     # W/m².K⁴ Stefan-Bolzmann constant
 Fwg = 1 / 5     # view factor wall - glass
@@ -206,6 +205,9 @@ filename = 'FRA_Lyon.074810_IWEC.epw'
 start_date = '2000-01-03 12:00:00'
 end_date = '2000-01-04 18:00:00'
 
+start_date = '2000-07-01 12:00:00'
+end_date = '2000-07-15 18:00:00'
+
 # Read weather data from Energyplus .epw file
 [data, meta] = dm4bem.read_epw(filename, coerce_year=None)
 weather = data[["temp_air", "dir_n_rad", "dif_h_rad"]]
@@ -233,17 +235,40 @@ data['Ti'] = 20 * np.ones(data.shape[0])
 # Indoor auxiliary heat flow rate
 data['Qa'] = 0 * np.ones(data.shape[0])
 
-# time
-t = dt * np.arange(data.shape[0])
+S = np.array([[wall['Surface']['Insulation'], 0],
+             [0, wall['Surface']['Glass']]])
+
+# flow sources: SW radiation absorbed
+# view factor
+F = np.array([[1 - Fwg, Fwg],
+              [1, 0]])
+
+ρSW = np.array([[1 - α_wSW, 0],
+               [0, 1 - α_gSW - τ_gSW]])
+
+Eow = τ_gSW * wall['Surface'][
+    'Glass'] / wall['Surface']['Concrete'] * data['Φt1']
+Eog = np.zeros_like(Eow)
+Eo = np.array([Eow, Eog])
+E = np.linalg.inv(np.eye(np.shape(Eo)[0]) - ρSW @ F) @ Eo
+Φ = S @ E
+Φi = pd.Series(α_wSW * Φ[0], index=data.index)
+Φa = pd.Series(α_gSW * Φ[1], index=data.index)
+# Simplified model
+# Φi = τ_gSW * α_wSW * wall['Surface']['Glass'] * data['Φt1']
+# Φa = α_gSW * wall['Surface']['Glass'] * data['Φt1']
+
+Φo = α_wSW * wall['Surface']['Concrete'] * data['Φt1']
+
 
 u = pd.concat([data['To'], data['To'], data['To'], data['Ti'],
-               α_wSW * wall['Surface']['Concrete'] * data['Φt1'],
-               τ_gSW * α_wSW * wall['Surface']['Glass'] * data['Φt1'],
-               data['Qa'],
-               α_gSW * wall['Surface']['Glass'] * data['Φt1']], axis=1)
+              Φo, Φi, data['Qa'], Φa], axis=1)
 
 # initial values for temperatures
 temp_exp = 20 * np.ones([As.shape[0], u.shape[0]])
+
+# time
+t = dt * np.arange(data.shape[0])
 
 # integration in time
 I = np.eye(As.shape[0])
@@ -264,8 +289,8 @@ axs[1].set(xlabel='Time [h]',
 axs[1].legend(loc='upper right')
 
 # plot total solar radiation and HVAC heat flow
-axs[2].plot(t / 3600,  q_HVAC, label='$q_{HVAC}$')
-axs[2].plot(t / 3600, data['Φt1'], label='$Φ_{total}$')
+axs[2].plot(t / 3600,  q_HVAC, label='$q_{HVAC} [W]$')
+axs[2].plot(t / 3600, data['Φt1'], label='$Φ_{total,1} [W/m²]$')
 axs[2].set(xlabel='Time [h]',
            ylabel='Heat flows [W]')
 axs[2].legend(loc='upper right')
