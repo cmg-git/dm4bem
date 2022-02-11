@@ -52,19 +52,23 @@ wall = pd.DataFrame(wall, index=['Concrete', 'Insulation', 'Glass'])
 ε_wLW = 0.7     # long wave wall emmisivity
 """ grey to dark surface EngToolbox,
     Absorbed Solar Radiation by Surface Color """
-α_wSW = 0.2     # absortivity white surface
+α_wSW = 0.1     # absortivity white surface
 
-""" Glass, pyrex EngToolbox Absorbed Solar Radiation bySurface Color """
-ε_gLW = 0.8     # long wave glass emmisivity
+""" Glass, pyrex EngToolbox Absorbed Solar Radiation by Surface Color """
+ε_gLW = 0.7     # long wave glass emmisivity
 
 """ EngToolbox Optical properties of some typical glazing mat
-    Window glass """
-τ_gSW = 0.5     # short wave glass transmitance
+    Window glass
+    https://www.nationalglass.com.au/wp-content/uploads/2019/06/Glass-Data_v4-Low-Res.pdf
+    Conduction and Radiation of Thermal Energy
+    https://www.glewengineering.com/window-energy-efficiency-solar-heat-gain-and-visible-transmittance/
+"""
+τ_gSW = 0.30    # short wave glass transmitance
 α_gSW = 0.05    # short wave glass absortivity
 
 σ = 5.67e-8     # W/m².K⁴ Stefan-Bolzmann constant
 Fwg = 1 / 5     # view factor wall - glass
-Tm = 20 + 273   # mean temp for radiative exchange
+Tm = 22 + 273   # mean temp for radiative exchange
 
 # convection coefficients, W/m² K
 h = pd.DataFrame([{'in': 4., 'out': 10}])
