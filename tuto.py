@@ -1,4 +1,4 @@
- #!/usr/bin/env python3
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
 Created on Mon Oct  4 19:05:01 2021
@@ -230,17 +230,38 @@ def P_control(filename, start_date, end_date, dt,
     # Indoor auxiliary heat flow rate
     data['Qa'] = 0 * np.ones(data.shape[0])
 
-    # time
-    t = dt * np.arange(data.shape[0])
+    # Flow-rate sources for SW radiation
+    S = np.array([[wall['Surface']['Insulation'], 0],
+                 [0, wall['Surface']['Glass']]])
+    # view factor
+    F = np.array([[1 - Fwg, Fwg],
+                  [1, 0]])
+
+    ρSW = np.array([[1 - α_wSW, 0],
+                   [0, 1 - α_gSW - τ_gSW]])
+
+    Eow = τ_gSW * wall['Surface'][
+        'Glass'] / wall['Surface']['Concrete'] * data['Φt1']
+    Eog = np.zeros_like(Eow)
+    Eo = np.array([Eow, Eog])
+    E = np.linalg.inv(np.eye(np.shape(Eo)[0]) - ρSW @ F) @ Eo
+    Φ = S @ E
+    Φi = pd.Series(α_wSW * Φ[0], index=data.index)
+    Φa = pd.Series(α_gSW * Φ[1], index=data.index)
+    # Simplified model for SW radiation sources
+    # Φi = τ_gSW * α_wSW * wall['Surface']['Glass'] * data['Φt1']
+    # Φa = α_gSW * wall['Surface']['Glass'] * data['Φt1']
+
+    Φo = α_wSW * wall['Surface']['Concrete'] * data['Φt1']
 
     u = pd.concat([data['To'], data['To'], data['To'], data['Ti'],
-                   α_wSW * wall['Surface']['Concrete'] * data['Φt1'],
-                   τ_gSW * α_wSW * wall['Surface']['Glass'] * data['Φt1'],
-                   data['Qa'],
-                   α_gSW * wall['Surface']['Glass'] * data['Φt1']], axis=1)
+                   Φo, Φi, data['Qa'], Φa], axis=1)
 
     # initial values for temperatures
     temp_exp = 20 * np.ones([As.shape[0], u.shape[0]])
+
+    # time
+    t = dt * np.arange(data.shape[0])
 
     # integration in time
     I = np.eye(As.shape[0])
@@ -469,7 +490,147 @@ def plot_results(t, y, temp_exp, q_HVAC, data):
     axs[1].set(xlabel='Time [h]',
                ylabel='Heat flows [W]')
     axs[1].legend(loc='upper right')
-    axs[1].set_ylim([-1000, 1000])
+    axs[1].set_ylim([-1000, 2000])
     fig.tight_layout()
     plt.draw()
     plt.show()
+
+
+# ## t07 Control input: heating & cooling and free-cooling
+# # =====================================================
+
+# K0 = 1e-3   # no controller Kp -> 0
+
+# TCa = thermal_circuit(K0)
+# [As, Bs, Cs, Ds] = dm4bem.tc2ss(
+#     TCa['A'], TCa['G'], TCa['b'], TCa['C'], TCa['f'], TCa['y'])
+# dtmax = min(-2. / np.linalg.eig(As)[0])
+# print(f'Maximum time step in free-floating: {dtmax:.2f} s')
+
+# ACH = 3                     # air changes per hour
+# Va_dot = ACH * Va / 3600    # m³/s air infiltration
+# TCa = thermal_circuit(K0)
+# [Av, Bv, Cv, Dv] = dm4bem.tc2ss(
+#     TCa['A'], TCa['G'], TCa['b'], TCa['C'], TCa['f'], TCa['y'])
+# dtmax = min(-2. / np.linalg.eig(Av)[0])
+# print(f'Maximum time step in free-floating: {dtmax:.2f} s')
+
+# dt = 360
+# Tisp = 20
+# DeltaT = 4
+
+# filename = 'FRA_Lyon.074810_IWEC.epw'
+# start_date = '2000-03-03 12:00:00'
+# end_date = '2000-03-07 14:00:00'
+# # Obtain the inputs
+# t, u, data = inputs(filename, start_date, end_date, dt,
+#                     As, Bs, Cs, Ds, K0, Tisp)
+
+# # initial values for temperatures
+# temp_exp = np.full([As.shape[0], u.shape[0]], np.inf)
+# temp_exp[:, 0] = Tisp * np.ones(As.shape[0])
+
+# I = np.eye(As.shape[0])
+
+# # # Free floating
+# # for k in range(u.shape[0] - 1):
+# #     temp_exp[:, k + 1] = (I + dt * As) @ temp_exp[:, k]\
+# #         + dt * Bs @ u.iloc[k, :]
+# # # Indoor temperature
+# # y = Cs @ temp_exp + Ds @ u.to_numpy().T
+# # # HVAC heat flow
+# # q_HVAC = K0 * (data['Ti'] - y[0, :])
+
+# # plot_results(t, y.T, temp_exp, q_HVAC, data)
+
+# # # Feed-back control of inputs
+# # Kp = 100   # perfect controller Kpc -> infinity
+
+# # y = np.zeros(u.shape[0])
+# # y[-1] = Tisp
+
+# # for k in range(u.shape[0] - 1):
+# #     # print(k, y[k - 1], temp_exp[2, k])
+# #     if Tisp < y[k - 1] < DeltaT + Tisp:
+# #         u.iloc[k, 6] = 0
+# #     else:
+# #         u.iloc[k, 6] = Kp * (Tisp - y[k - 1])
+
+# #     temp_exp[:, k + 1] = (I + dt * As) @ temp_exp[:, k]\
+# #         + dt * Bs @ u.iloc[k, :]
+# #     y[k] = Cs @ temp_exp[:, k] + Ds @ u.iloc[k]
+
+# # q_HVAC = u.iloc[:, 6].to_numpy()
+
+# # plot_results(t, y, temp_exp, q_HVAC, data)
+
+
+# # Predicitve control of inputs
+# # temp_exp = np.full([As.shape[0], u.shape[0]], np.inf)
+# # temp_exp[:, 0] = Tisp * np.ones(As.shape[0])
+# Ki = 10
+
+# y = np.zeros(u.shape[0])
+# y[0] = Tisp
+
+# for k in range(u.shape[0] - 1):
+#     # u.iloc[k, 6] = 0
+
+#     while (y[k] < Tisp or y[k] > DeltaT + Tisp) and abs(Tisp - y[k]) > 0.2:
+#         # print(k, u.iloc[k, 6], y[k])
+#         u.iloc[k, 6] += Ki * (Tisp - y[k])
+#         temp_exp[:, k + 1] = (I + dt * As) @ temp_exp[:, k]\
+#             + dt * Bs @ u.iloc[k, :]
+#         y[k] = Cs @ temp_exp[:, k + 1] + Ds @ u.iloc[k]
+
+#     temp_exp[:, k + 1] = (I + dt * As) @ temp_exp[:, k]\
+#         + dt * Bs @ u.iloc[k, :]
+#     y[k + 1] = Cs @ temp_exp[:, k] + Ds @ u.iloc[k]
+#     u.iloc[k + 1, 6] = u.iloc[k, 6]
+
+# q_HVAC = u.iloc[:, 6].to_numpy()
+# plot_results(t, y, temp_exp, q_HVAC, data)
+
+
+# # Predicitve control of inputs with free-cooling
+# t, u, data = inputs(filename, start_date, end_date, dt,
+#                     As, Bs, Cs, Ds, K0, Tisp)
+# temp_exp = np.full([As.shape[0], u.shape[0]], np.inf)
+# temp_exp[:, 0] = Tisp * np.ones(As.shape[0])
+# Ki = 10
+
+# y = np.zeros(u.shape[0])
+# y[0] = Tisp
+
+# for k in range(u.shape[0] - 1):
+#     print(k)
+#     # temp_exp[:, k + 1] = (I + dt * As) @ temp_exp[:, k]\
+#     #     + dt * Bs @ u.iloc[k + 1, :]
+#     # y[k] = Cs @ temp_exp[:, k + 1] + Ds @ u.iloc[k]
+#     if data.iloc[k]['To'] < Tisp and y[k] > DeltaT + Tisp:
+#         while (y[k] < Tisp or y[k] > DeltaT + Tisp) and abs(Tisp - y[k]) > 0.2:
+#             print(f'TO < Ti, {k}, {u.iloc[k, 6]:5.1f}, {y[k]:5.1f}')
+#             u.iloc[k, 6] += Ki * (Tisp - y[k])
+#             temp_exp[:, k + 1] = (I + dt * Av) @ temp_exp[:, k]\
+#                 + dt * Bv @ u.iloc[k, :]
+#             y[k] = Cv @ temp_exp[:, k + 1] + Dv @ u.iloc[k]
+
+#         temp_exp[:, k + 1] = (I + dt * Av) @ temp_exp[:, k]\
+#             + dt * Bv @ u.iloc[k, :]
+#         y[k + 1] = Cv @ temp_exp[:, k] + Dv @ u.iloc[k]
+#         u.iloc[k + 1, 6] = u.iloc[k, 6]
+#     else:
+#         while (y[k] < Tisp or y[k] > DeltaT + Tisp) and abs(Tisp - y[k]) > 0.2:
+#             # print(f'TO > Ti, {k}, {u.iloc[k, 6]:5.1f}, {y[k]:5.1f}')
+#             u.iloc[k, 6] += Ki * (Tisp - y[k])
+#             temp_exp[:, k + 1] = (I + dt * As) @ temp_exp[:, k]\
+#                 + dt * Bs @ u.iloc[k, :]
+#             y[k] = Cs @ temp_exp[:, k + 1] + Ds @ u.iloc[k]
+
+#         temp_exp[:, k + 1] = (I + dt * As) @ temp_exp[:, k]\
+#             + dt * Bs @ u.iloc[k, :]
+#         y[k + 1] = Cs @ temp_exp[:, k] + Ds @ u.iloc[k]
+#         u.iloc[k + 1, 6] = u.iloc[k, 6]
+
+# q_HVAC = u.iloc[:, 6].to_numpy()
+# plot_results(t, y, temp_exp, q_HVAC, data)
