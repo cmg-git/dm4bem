@@ -239,10 +239,9 @@ data['Ti'] = 20 * np.ones(data.shape[0])
 # Indoor auxiliary heat flow rate
 data['Qa'] = 0 * np.ones(data.shape[0])
 
+# Flow-rate sources for SW radiation
 S = np.array([[wall['Surface']['Insulation'], 0],
              [0, wall['Surface']['Glass']]])
-
-# flow sources: SW radiation absorbed
 # view factor
 F = np.array([[1 - Fwg, Fwg],
               [1, 0]])
@@ -258,7 +257,7 @@ E = np.linalg.inv(np.eye(np.shape(Eo)[0]) - ρSW @ F) @ Eo
 Φ = S @ E
 Φi = pd.Series(α_wSW * Φ[0], index=data.index)
 Φa = pd.Series(α_gSW * Φ[1], index=data.index)
-# Simplified model
+# Simplified model for SW radiation sources
 # Φi = τ_gSW * α_wSW * wall['Surface']['Glass'] * data['Φt1']
 # Φa = α_gSW * wall['Surface']['Glass'] * data['Φt1']
 
