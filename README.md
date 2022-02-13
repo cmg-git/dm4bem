@@ -10,5 +10,5 @@ The notebooks can be run interactively on MyBinder.com by clicking on the button
 - t03: Model and dynamic simulation of a cubic building with proportional feed-back control.
 - t04: Assembling thermal circuits.
 - t05: Heating and cooling with dead-band.
-- t06: Control by changing the inputs in the during the itegration in time.
+- t06: Control by changing the inputs during the itegration in time.
 - t07: Free-cooling by switching between models and changing the inputs during the integration.
