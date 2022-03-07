@@ -24,6 +24,4 @@ The notebooks can be run interactively on MyBinder.com by clicking on the button
 3. C. Ghiaus (2021). Dynamic Models for Energy Control of Smart Homes, in S. Ploix M. Amayri, N. Bouguila (eds.) Towards Energy Smart Homes, Online ISBN: 978-3-030-76477-7, Print ISBN: 978-3-030-76476-0, Springer, pp. 163-198 (ref.)
 [DOI 10.1007/978-3-030-76477-7_5](https://doi.org/10.1007/978-3-030-76477-7_5), [HAL 03578578](https://hal.archives-ouvertes.fr/hal-03578578/document)
 
-
-
-
+4. J. Kneifel (2013). Annual Whole Building Energy Simulation of the NIST Net Zero Energy Residential Test Facility Design, NIST Technical Note 1767, [DOI 10.6028/NIST.TN.1767](https://doi.org/10.6028/NIST.TN.1767)
